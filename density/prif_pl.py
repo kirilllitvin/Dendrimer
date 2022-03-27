@@ -440,7 +440,7 @@ def normalization(datay, step, k):
         
 #функция которая считает радиальный профиль плотности во все моменты времени, для атомов кремения отдельно для каждой точки ветвления
 #G - номер генирации дендримера; Ncore - функциональность ядра; Npoints - функциональность точек ветвления
-def density_profile_si(file_name_itp, file_name_g96, step, G, Ncore, Npoints):
+def si(file_name_itp, file_name_g96, step, G, Ncore, Npoints):
 #   Создаём массив с координатами и массой кождого si и его номер; создаётся отдельный слот для каждого слоя точек ветвления
     data_atom_si = [ [[], [], [], [], []] for i in range(G+1)]
      
@@ -483,10 +483,11 @@ def density_profile_si(file_name_itp, file_name_g96, step, G, Ncore, Npoints):
 
 #density_profile("c43g6.itp", "trg6_300.g96", 0.2)
 #density_profile_atom("c43g5.itp", "tr_g5_300_1500.g96", 0.2, "si")
-density_profile_si("c43g6.itp", "trg6_300.g96", 0.2, 6, 4, 3)
+#density_profile_si("c43g6.itp", "trg6_300.g96", 0.2, 6, 4, 3)
 
 #data_atom_sistem = file_itp_read("c43g6.itp")
 #deta_atom_sistem_si = file_itp_read_atom("c43g6.itp", "si")
 
+file_itp_read_si("c43g6.itp", )
 
 

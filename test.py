@@ -1,5 +1,2 @@
-import imp
-
-
-import numpy as np 
-import matplotlib.pyplot as plt 
+a = 1 + 4 + 8 + 16 + 32 + 64 + 128
+print(a)
