@@ -17,3 +17,6 @@ atom_name = "si"
 G = 6
 core = 4
 points = 3
+
+#Название файла в который будет произведена запись
+file_name = density.txt
