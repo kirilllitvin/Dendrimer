@@ -2,14 +2,11 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import math
 
-from numpy import append
-
-
 
 #Читаем файл с настройками
 def file_settings_file():
 
-    file_itp_name = ""; file_trajectory = ""; step = 0.2; working_mode = 1; atom_name = "si"; G = 0; core = 0; points = 0; file_name = 'density.txt'
+    file_itp_name = ""; file_trajectory = ""; step = 0.2; working_mode = 1; atom_name = "si"; system_center_core = False; G = 0; core = 0; points = 0; file_name = 'density.txt'
 
     file_settings = open("setting_density.txt", 'r')
 
@@ -27,6 +24,8 @@ def file_settings_file():
 
         if "atom_name" in line: atom_name = line.split()[2]
 
+        if "system_center" in line and "2" == line.split()[2]: system_center_core = True
+
         if "G" in line: G = int(line.split()[2])
 
         if "core" in line: core = int(line.split()[2])
@@ -36,7 +35,7 @@ def file_settings_file():
         if "file_name" in line: file_name = line.split()[2]
 
     file_settings.close()
-    return file_itp_name, file_trajectory, step, working_mode, atom_name, G, core, points, file_name
+    return file_itp_name, file_trajectory, step, working_mode, atom_name, system_center_core, G, core, points, file_name
 
 #читаем файл itp и берём оттуда массу каждого атома
 def file_itp_read(name_file):
@@ -64,7 +63,7 @@ def file_itp_read(name_file):
     return data_atom
 
 #Тут должна быть функция которая выделяет отдельные виды атомов
-def atom_sort(data_atom_sistem, atom_name):  
+def atom_sort(data_atom_sistem, atom_name, system_center_core):  
 #   Создаём массив в который будет записаны координаты атомов определённого сорта, их масса и id
     data_atom_sort = [[], [], [], [], []]
 
@@ -74,8 +73,14 @@ def atom_sort(data_atom_sistem, atom_name):
     if "si" in atom_name: data_atom_mass = 28
     if "C2" in atom_name: data_atom_mass = 14
     if "C3" in atom_name: data_atom_mass = 15
- 
-    for i in range(len(data_atom_sistem[3])):
+    
+
+#   Если мы мы считаем сферические слои от ядра то для построения графиков мы его не берём  
+    k = 0
+    if system_center_core:
+        k = 1
+        
+    for i in range(k, len(data_atom_sistem[3])):
         if data_atom_sistem[3][i] == data_atom_mass:
             data_atom_sort[3].append(data_atom_sistem[3][i])
             data_atom_sort[4].append(i+1)
@@ -168,17 +173,7 @@ def atom_si(data_atom_sistem, G, core, points):
 
 def spherical_layer_volume(r1, r2):
     return  4 * math.pi / 3 * (r2 ** 3 - r1 ** 3)
-
-#Нормировка; k - колличество атомов в слое
-def density_normalization(density, step, k):
-    sum_h = 0
-    for element in density: # ищем сумму наших столбцов
-        sum_h += element
-    x = k / (step * sum_h) # ищем коэффициент x
-#    x = 1 / step
-    for i in range(len(density)): # умножаем каждый столбик на сотвествующий коэффициент
-        density[i] *= x
-    return density    
+   
 
 #Функция которая считает профиль плотности в какой-то момент времни
 #data_atom - атомы одного сорта если просисходит их разделение; в таком случае data_atom_all - атомы всей системы
@@ -222,11 +217,10 @@ def density_profile_one_time(density, step, data_atom_sistem, data_atom_sort = [
             j = int(dataj[i]) # то какому слою принадлежит ато
             density[j] += data_atom_sort[3][i] # добавляем массу
     
-def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem, data_atom_sort = [], centr_of_mass = False  ,normalization = False):
+def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem, data_atom_sort = [], system_center_core = False  ,normalization = False):
 
     #сюда будет записана плотность 
     density = data_density(file_name_g96, step)
-
 
     Flag_sort_atom = False
 #   Смотрим работаем ли мы с определёнными атомами системы или нет
@@ -258,7 +252,7 @@ def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem
             if Flag_sort_atom:
                 [data_atom_sort[i].clear() for i in range(3)] # делаем массивы содержащие координаты атомов пустыми
             
-            if centr_of_mass:
+            if system_center_core:
                 data_core.clear()
 
             Flag = False
@@ -271,7 +265,7 @@ def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem
             [data_atom_sistem[i].append(float(data_xyz[i])) for i in range(3)] # добвляем координаты x, y, z атома в определённый момент времени в соотвествующие ячейки
             count_line += 1
 
-        if centr_of_mass and Flag and count_line == 1:
+        if system_center_core and Flag and count_line == 1:
             cm_xyz = line.split()
             [data_core.append(float(cm_xyz[i])) for i in range(3)] 
 
@@ -286,9 +280,7 @@ def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem
 #   P.S: масса 1 нуклона 1,67 * 10 ^ (-27) кг; размерность step - ангстрем; плотность (R) - имеет размерность г/см ^ 3
     if normalization: # Если есть нормировка то просто считаем среднее
         for i in range(len(density)):
-        #    volume = spherical_layer_volume(step * i, step * (i+1)) 
-            density[i] /= time_step
-        #density_normalization(density, step, len(data_atom_sort[3]))   
+            density[i] /= time_step   
     else:
         for i in range(len(density)):
             volume = spherical_layer_volume(step * i, step * (i+1))
@@ -304,11 +296,10 @@ def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem
     return datar, density[:last_none_zero]
 
 
-
 #тут будет происходить вызов функции 
 def density_profile(): 
 #   Читаем файл с настройками и заполняем соотвествующие параметры
-    file_itp_name, file_trajectory_name, step, working_mode, atom_name, G, core, points, file_name = file_settings_file()
+    file_itp_name, file_trajectory_name, step, working_mode, atom_name, system_center_core, G, core, points, file_name = file_settings_file()
 
 #   Получаем массив с массами всей системы
     data_atom_sistem = file_itp_read(file_itp_name)
@@ -321,20 +312,22 @@ def density_profile():
 
     ax = fig.add_subplot(gs[0,0])
     ax.set_xlabel(r'R, $\AA$', fontsize=20)
-    ax.set_ylabel(r'$\rho$, г/$см^3$', fontsize=20)
-    ax.set_ylim([0, 1.5])
 
 #    if True:
     if working_mode == 1:
         datar1, density1 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem)
         writing_to_file(datar1, density1, file_name)
+
+        ax.set_ylabel(r'$\rho$, г/$см^3$', fontsize=20)
         ax.plot(datar1, density1)
 
     if working_mode == 2:
-#       Получаем массив с отсортированными атомами        
-        data_atom_sort = atom_sort(data_atom_sistem, atom_name)
-        datar2, density2 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, data_atom_sort, True, False)
+#       Получаем массив в котором только атомы кремния         
+        data_atom_sort = atom_sort(data_atom_sistem, atom_name, system_center_core)
+        datar2, density2 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, data_atom_sort, system_center_core, False)
         writing_to_file(datar2, density2, file_name)
+
+        ax.set_ylabel(r'$\rho$, г/$см^3$', fontsize=20)
         ax.plot(datar2, density2)
         
 
@@ -344,12 +337,11 @@ def density_profile():
         file = open(file_name, 'w') # очищаем файл перед записью
         file.close()
         for i in range(1, G+1):
-            datar3, density3 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, data_atom_si[i], False, True)
+            datar3, density3 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, data_atom_si[i], system_center_core, True)
             writing_to_file(datar3, density3, file_name,'a', i)
             ax.plot(datar3, density3)
 
             
-
     if working_mode == 4:
         pass
 
