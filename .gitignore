@@ -1,6 +1,5 @@
-trg6_300.g96
-c43g6.itp
+*.g96
+*.gro
+*.txt
+c43*
 test.py
-tr.gro
-density.txt
-tr300_11ns.g96

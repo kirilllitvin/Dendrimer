@@ -1,6 +1,6 @@
 #Название itp файла и файла с траекторией(.g96)
 file_itp_name = c43g6.itp
-file_trajectory_name = tr300_11ns.g96 
+file_trajectory_name = tr600_51.g96
 
 #Шаг усреднения(в ангстремах)
 step - 0.2

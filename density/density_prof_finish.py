@@ -1,5 +1,3 @@
-from enum import Flag
-from locale import normalize
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import math
@@ -42,7 +40,10 @@ def file_settings_file():
 #читаем файл itp и берём оттуда массу каждого атома
 def file_itp_read(name_file):
 
-    data_atom = [[], [], [], []]
+#   характеристики каждого атома
+#   x y z координата масса id и в какой номер массива по плотности мы его записываем
+#   если последний параметр равен -1 то это значит не куда по итогу мы его не записываем
+    data_atom = [[], [], [], [], []]
     file_itp = open(name_file, 'r')
 
     Flag = False
@@ -60,14 +61,13 @@ def file_itp_read(name_file):
 #Запись масс
         if Flag:
             data_atom[3].append(float(line.split()[-1]))
+            data_atom[4].append(-1)
 
     file_itp.close()
     return data_atom
 
 #Функция которая выделяет отдельные виды атомов
 def atom_sort(data_atom_sistem, atom_name, system_center_core):  
-#   Создаём массив в который будет записаны координаты атомов определённого сорта, их масса и id
-    data_atom_sort = [[], [], [], [], []]
 
 #   Определённый типы атомов отличаются по массе и исходя из названия мы получаем массу
 #   Затем сортируем массив всех атомов по массе
@@ -76,7 +76,6 @@ def atom_sort(data_atom_sistem, atom_name, system_center_core):
     if "C2" in atom_name: data_atom_mass = 14
     if "C3" in atom_name: data_atom_mass = 15
     
-
 #   Если мы мы считаем сферические слои от ядра то для построения графиков мы его не берём  
     k = 0
     if system_center_core:
@@ -84,16 +83,11 @@ def atom_sort(data_atom_sistem, atom_name, system_center_core):
         
     for i in range(k, len(data_atom_sistem[3])):
         if data_atom_sistem[3][i] == data_atom_mass:
-            data_atom_sort[3].append(data_atom_sistem[3][i])
-            data_atom_sort[4].append(i+1)
-
-    return data_atom_sort
-
-
-#выделение только атомов кремния по генерационным слоям
+            data_atom_sistem[4][i] = 0    
+            
+#выделение только атомов кремния по генерационным слоям (не берём при этом ядро)
 def atom_si(data_atom_sistem, G, core, points):
-#   Создаём массив с координатами и массой кождого si и его номер; создаётся отдельный слот для каждого слоя точек ветвления  
-    data_atom_si = [[[], [], [], [], []] for i in range(G+1)] 
+
 #   Создаём массив в которой хранится число атомов кремния в отдельном генрационном слое и заполняем его
 #   Для удобства сразу в него кладём ядро (т.е. добавляем единичку)
     number_atom_si_in_layers = [1]
@@ -105,10 +99,9 @@ def atom_si(data_atom_sistem, G, core, points):
 
     number_layers = 0 # Номер слоя точек ветления. Отсчёт начниаем от ядра (ядро - нулевой слой)
     number_atom = 1 #   Колличество атомов в слое
-    for i in range(len(data_atom_sistem[3])):
+    for i in range(len(data_atom_sistem[4])):
         if data_atom_sistem[3][i] == 28: 
-            data_atom_si[number_layers][3].append(data_atom_sistem[3][i])
-            data_atom_si[number_layers][4].append(i+1)
+            data_atom_sistem[4][i] = number_layers - 1  #   считаем слои с 0, а не с 1          
 
 #           Это всё нужно чтобы соотвествующие слои точек ветления расположились в соотвествующие слои в массиве            
             if number_atom < number_atom_si_in_layers[number_layers]: #   Пока счёткик атомов в слое меньше колличества атом в слое мы делаем запись в слой
@@ -120,13 +113,10 @@ def atom_si(data_atom_sistem, G, core, points):
                 else:
                     number_atom = 1 # Обновляем счётчик 
                     number_layers += 1 # переходим на следующий слой
-
-    return data_atom_si
+    
 
 # функция которая разделяет атомы по генерационным слоям
 def generation_layer(data_atom_sistem, G, core, points):
-#   Создаём массив с координатами и массой кождого генерационного слоя и его номер; создаётся отдельный слот для каждого генерационного слоя
-    data_atom_gen = [[[], [], [], [], []] for i in range(G+1)]
 
 #   Создаём массив в которой хранится число атомов кремния в отдельном генрационном слое и заполняем его
 #   При этом ядро не учитывается
@@ -136,26 +126,21 @@ def generation_layer(data_atom_sistem, G, core, points):
 #       Числа атомов в генерационном слое = число атомов слое до * функциональность точек ветвления - 1
 #       Тут так же учтено что ядро может иметь другую функциональность
         core *= points - 1
-
-    print(number_atom_si_in_layers)
-
-#   Отдельно добовляем ядро в первые генрационный слой
-    data_atom_gen[0][3].append(data_atom_sistem[3][0])
-    data_atom_gen[0][4].append(1)
+    
+#   Отдельно добовляем ядро в первые генрационный слой(отсчёт начинается с нуля)
+    data_atom_sistem[4][0] = 0
 
     number_layers = 0 # Номер слоя точек ветления. Отсчёт начниаем от ядра (ядро - нулевой слой)
     number_atom = 1 #   Колличество атомов si в слое
     Flag = False # После атомов si идут сразу по номеру атомы CH3 которые нужно сразу записать в следующий ген слой
-    for i in range(1, len(data_atom_sistem[3])):
+    for i in range(1, len(data_atom_sistem[4])):
 
-#       Если попадется атом кремния то мы его массу и id записываем в следующий генерационный слой 
+#       Если попадется атом кремния то мы его  записываем в следующий генерационный слой 
         if data_atom_sistem[3][i] == 28: 
-            data_atom_gen[number_layers+1][3].append(data_atom_sistem[3][i])
-            data_atom_gen[number_layers+1][4].append(i+1)
-
-#           Записываем CH3
-            data_atom_gen[number_layers+1][3].append(data_atom_sistem[3][i+1])
-            data_atom_gen[number_layers+1][4].append(i+2)
+            data_atom_sistem[4][i] = number_layers + 1
+            
+#           Записываем CH3(которые идут сразу после кремния)
+            data_atom_sistem[4][i+1] = number_layers + 1
             Flag = True
     
 #           Это всё нужно чтобы соотвествующие слои точек ветления расположились в соотвествующем генерационном слое             
@@ -164,6 +149,7 @@ def generation_layer(data_atom_sistem, G, core, points):
             else: # как только счётчик принял значение атомов в слое мы перескакиваем на следующий слой, обновляя счётчик
                     number_atom = 1 # Обновляем счётчик si
                     number_layers += 1 # переходим на следующий слой
+                    print(number_layers)                  
             continue
 
 #       Пропуск из-за записи CH3
@@ -172,11 +158,8 @@ def generation_layer(data_atom_sistem, G, core, points):
             continue
 
 #       Записывам остальные атомы
-        data_atom_gen[number_layers][3].append(data_atom_sistem[3][i])
-        data_atom_gen[number_layers][4].append(i+1)
-
-    return data_atom_gen
-
+        data_atom_sistem[4][i] = number_layers
+            
 #Запись в файл
 def writing_to_file(datax, datay, file_name, mode_writing = 'w', G = 0):
     
@@ -194,7 +177,7 @@ def writing_to_file(datax, datay, file_name, mode_writing = 'w', G = 0):
     file.close()
 
 #Создаём массив с плотностями
-def data_density(file_name_g96, step):
+def data_density(file_name_g96, step, number_data_density):
     #   Открываем файл с траекторией
     g96 = open(file_name_g96, 'r')
     a = 0 # колличество элементов в массиве плотности
@@ -210,7 +193,7 @@ def data_density(file_name_g96, step):
             a = int(max(box) * 10 / step) #  Наибольшая сторона бокса. Делим на два так как как-будто наш дендример не выходит за пределы бокса и его плотности там не может быть (максимальная оценка). 
             break
     g96.close()
-    return [0. for i in range(0, a)]
+    return [[0. for i in range(0, a)] for i in range(number_data_density)] 
 
 #функция которая считает центр масс
 def coordinate_center_mass(data_atom_sistem):
@@ -232,55 +215,39 @@ def spherical_layer_volume(r1, r2):
 #Функция которая считает профиль плотности в какой-то момент времни
 #data_atom - атомы одного сорта если просисходит их разделение; в таком случае data_atom_all - атомы всей системы
 #normalization - делаем ли мы нормировку ? Если True, то да 
-def density_profile_one_time(density, step, data_atom_sistem, data_atom_sort = [], data_core = [], normalization = False):
-
-#   Нужно если мы строим профиль плотности не всей системы    
-    if  data_atom_sort == []:
-        data_atom_sort = data_atom_sistem
+def density_profile_one_time(density, step, data_atom_sistem, data_core = [], normalization = False):
 
     if data_core == []:        
-#   Получаем расстояение до центра масс:
+#       Получаем расстояение до центра масс:
         x0, y0, z0 = coordinate_center_mass(data_atom_sistem)   
     else:
         x0, y0, z0 = data_core[0], data_core[1], data_core[2] 
 
-#   Делим всё прострнаство на слои, и присваиваем им номер j; и определяем какой атом какому слою принадлежит (если что слои нумеруются c 0, а их колличество на 1 больше чем макс. значение j в массиве)
-#   Чтобы определить какой атом какому слою принадлежит мы делим целочисленно его расстояние от центра масс на наш выбранный шаг step
-    dataj = [] # тут будут храниться то какой атом какому слою принадлежит
-    for i in range(len(data_atom_sort[3])):
-        rcm = ((data_atom_sort[0][i] - x0) ** 2 + (data_atom_sort[1][i] - y0) ** 2 + (data_atom_sort[2][i] - z0) ** 2) ** 0.5 #  Считаем расстояние до центра масс
-        j = rcm * 10  // step # disctance_to_cm[i] имеет размерность нанометра, а step - ангстрем
-        dataj.append(j)
-    
-#   Если необходимо делать нормировку
-    if normalization:
-#       Заполняем соотвуствующие ячейки колличеством атомов в слое
-        for i in range(len(data_atom_sort[0])):
-            j = int(dataj[i]) # то какому слою принадлежит атом
-            density[j] += 1 # 1 столбик
-
-#   Считаем профиль плотности
-    else:
 #   Исходная формула для профиля плотности выглядит как:
 #   плотность(R) = (сумма по i (mi)) /  Vi(R), где mi - частица попавшая в шаровой слой Vi(R); R - расстояние от центра масс
 #   умножаем каждую ячейку в которой хранится атомная масса на соотвествующий массовый коэффициент и делим на объём сверического слоя
 #   P.S: масса 1 нуклона 1,67 * 10 ^ (-27) кг; размерность step - ангстрем; плотность (R) - имеет размерность г/см ^ 3
 
-#       Заполняем соотвуствующие ячейки атомной массой
-        for i in range(len(data_atom_sort[3])):
-            j = int(dataj[i]) # то какому слою принадлежит ато
-            density[j] += data_atom_sort[3][i] # добавляем массу
-    
-def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem, data_atom_sort = [], system_center_core = False  ,normalization = False):
+#   Делим всё прострнаство на слои, и присваиваем им номер j; и определяем какой атом какому слою принадлежит (если что слои нумеруются c 0, а их колличество на 1 больше чем макс. значение j в массиве)
+#   Чтобы определить какой атом какому слою принадлежит мы делим целочисленно его расстояние от центра масс на наш выбранный шаг step
+      
+#   Заполняем соотвуствующие ячейки колличеством атомов в слое
+    for i in range(len(data_atom_sistem[0])):
+        k = data_atom_sistem[4][i] # то какому слою принадлежит атом
+        if k != -1:
+            rcm = ((data_atom_sistem[0][i] - x0) ** 2 + (data_atom_sistem[1][i] - y0) ** 2 + (data_atom_sistem[2][i] - z0) ** 2) ** 0.5 #  Считаем расстояние до центра масс
+            j = int(rcm * 10  // step)  # то какому шаровому слою принадлежит атом
+            if normalization: #Если необходимо делать нормировку
+                density[k][j] += 1 # 1 столбик
+            else:
+                density[k][j] += data_atom_sistem[3][i] # добавляем массу
+
+   
+def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem, number_data_density, system_center_core = False, normalization = False):
 
     #сюда будет записана плотность 
-    density = data_density(file_name_g96, step)
-
-    Flag_sort_atom = False
-#   Смотрим работаем ли мы с определёнными атомами системы или нет
-    if data_atom_sort != []:
-        Flag_sort_atom = True
-
+    density = data_density(file_name_g96, step, number_data_density)
+  
 #   Открываем файл
     g96 = open(file_name_g96, 'r')
     data_core = []
@@ -300,12 +267,9 @@ def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem
             continue
 
         if Flag and "BOX" in line:
-            density_profile_one_time(density, step, data_atom_sistem, data_atom_sort, data_core, normalization)       
+            density_profile_one_time(density, step, data_atom_sistem, data_core, normalization)       
             [data_atom_sistem[i].clear() for i in range(3)] # делаем массивы содержащие координаты атомов пустыми
-
-            if Flag_sort_atom:
-                [data_atom_sort[i].clear() for i in range(3)] # делаем массивы содержащие координаты атомов пустыми
-            
+                        
             if system_center_core:
                 data_core.clear()
 
@@ -323,31 +287,33 @@ def density_profile__for_all_the_time_atom(file_name_g96, step, data_atom_sistem
             cm_xyz = line.split()
             [data_core.append(float(cm_xyz[i])) for i in range(3)] 
 
-#       Заполняем массив с координатами для выбранных нами атомов если они есть
-        if Flag_sort_atom and Flag and count_line in data_atom_sort[-1]:
-            data_xyz = line.split() 
-            [data_atom_sort[i].append(float(data_xyz[i])) for i in range(3)] # добвляем координаты x, y, z атома в определённый момент времени в соотвествующие ячейки
-
 
 #   Если мы не делаем нормировку, то делаем усреднение по времени 
 #   Производим усреднение по времени и умножаем каждую ячейку в которой хранится атомная масса на соотвествующий массовый коэффициент и делим на объём сверического слоя
 #   P.S: масса 1 нуклона 1,67 * 10 ^ (-27) кг; размерность step - ангстрем; плотность (R) - имеет размерность г/см ^ 3
-    if normalization: # Если есть нормировка то просто считаем среднее
-        for i in range(len(density)):
-            density[i] /= time_step   
-    else:
-        for i in range(len(density)):
-            volume = spherical_layer_volume(step * i, step * (i+1))
-            density[i] *= 1.66 / (volume * time_step)
-#   Ищем последний ненулевой элемент (всё дедалось с расчётом что он будет и тут не учтено что последний не может быть ненулевой)
-    last_none_zero = 0
-    for i in range(1, len(density) + 1):
-        if density[-i] != 0:
-            last_none_zero = -i + 1
-            break   
+    data_density_finish = []
+    datar_finish = []
+    for j in range(len(density)):
 
-    datar= [step * (i + 0.5) for i in range(len(density[:last_none_zero]))]
-    return datar, density[:last_none_zero]
+        for i in range(len(density[j])):
+            if normalization:  # Если есть нормировка то просто считаем среднее
+                density[j][i] /= time_step
+            else:
+                volume = spherical_layer_volume(step * i, step * (i+1))
+                density[j][i] *= 1.66 / (volume * time_step)          
+
+#       Ищем последний ненулевой элемент (всё дедалось с расчётом что он будет и тут не учтено что последний не может быть ненулевой)
+        last_none_zero = 0
+        for i in range(1, len(density[j]) + 1):
+            if density[j][-i] != 0:
+                last_none_zero = -i + 1
+                break
+        datar = [step * (i + 0.5) for i in range(len(density[j][:last_none_zero]))]
+
+        data_density_finish.append(density[j][:last_none_zero])
+        datar_finish.append(datar)   
+
+    return datar_finish, data_density_finish
 
 
 #тут будет происходить вызов функции 
@@ -357,58 +323,58 @@ def density_profile():
 
 #   Получаем массив с массами всей системы
     data_atom_sistem = file_itp_read(file_itp_name)
-
     
-
 #   Необходимо для построения графиков
     fig = plt.figure()
     gs = GridSpec(ncols=1, nrows=1, figure=fig)
-
     ax = fig.add_subplot(gs[0,0])
     ax.set_xlabel(r'R, $\AA$', fontsize=20)
+    
+#   Куда будет записана плотность и расстояние до шаровых слоёв    
+    datar = []
+    density = []
+    writing_mode = 'w' # как мы открываем файл
 
-#    if True:
     if working_mode == 1:
-        datar1, density1 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem)
-        writing_to_file(datar1, density1, file_name)
+        for i in range(len(data_atom_sistem[3])):
+            data_atom_sistem[4][i] = 0
 
+        number_data_density = 1
+        datar, density = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, number_data_density)
         ax.set_ylabel(r'$\rho$, г/$см^3$', fontsize=20)
-        ax.plot(datar1, density1)
 
     if working_mode == 2:
-#       Получаем массив в котором только атомы кремния         
-        data_atom_sort2 = atom_sort(data_atom_sistem, atom_name, system_center_core)
-        datar2, density2 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, data_atom_sort2, system_center_core, False)
-        writing_to_file(datar2, density2, file_name)
-
+        number_data_density = 1
+#       Выделяем нужные нам атомы        
+        atom_sort(data_atom_sistem, atom_name, system_center_core)
+        datar, density = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, number_data_density, system_center_core, False)
         ax.set_ylabel(r'$\rho$, г/$см^3$', fontsize=20)
-        ax.plot(datar2, density2)
+
         
-
-    if working_mode == 3 or working_mode == 4:
-#       Нормировка 
+    if working_mode == 3 or working_mode == 4: 
+#       Делаем ли нормировку 
         norm = True
-
-#       Получаем массив с атомами кремния
         if working_mode == 3:
-            data_atom_sort34 = atom_si(data_atom_sistem, G, core, points)
-            start_check = 1
+            number_data_density = G
+#           Выделяем атомы кремния            
+            atom_si(data_atom_sistem, G, core, points)
             norm = True
-#       Нормировка
 
-        if working_mode == 4:
-#       Получаем массив с атомами разделённые по генерационным слоя            
-            data_atom_sort34 = generation_layer(data_atom_sistem, G, core, points)
-            start_check = 0
+        else:
+            number_data_density = G + 1
+#           Получаем массив с атомами разделённые по генерационным слоя            
+            generation_layer(data_atom_sistem, G, core, points)
             norm = False
+            ax.set_ylabel(r'$\rho$, г/$см^3$', fontsize=20)
+
+        datar, density = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, number_data_density, system_center_core, norm)
 
         file = open(file_name, 'w') # очищаем файл перед записью
         file.close()
-        for i in range(start_check, G+1):
-            datar34, density34 = density_profile__for_all_the_time_atom(file_trajectory_name, step, data_atom_sistem, data_atom_sort34[i], system_center_core, norm)
-            writing_to_file(datar34, density34, file_name,'a', i)
-            ax.plot(datar34, density34)
-                
+        writing_mode = 'a'
+
+    [writing_to_file(datar[i], density[i], file_name, writing_mode, i+1) for i in range(len(density))]
+    [ax.plot(datar[i], density[i]) for i in range(len(density))]
     ax.grid()
     plt.show()
 
